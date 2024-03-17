@@ -1,0 +1,26 @@
+x-with_app: &with_app
+  working_dir: /app
+  volumes:
+    - .:/app
+    - gocache:/root/.cache/go-build
+    - gomodcache:/go/pkg/mod
+
+services:
+  lint:
+    <<: *with_app
+    image: golangci/golangci-lint:v1.56.2
+    command: ["golangci-lint", "run", "-v"]
+    
+  test:
+    <<: *with_app
+    image: golang:1.22.1
+    command: ["go", "test", "-v", "./..."]
+
+  format:
+    <<: *with_app
+    image: golang:1.22.1
+    command: ["go", "fmt", "./..."]
+
+volumes:
+  gocache: {}
+  gomodcache: {}

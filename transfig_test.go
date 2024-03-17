@@ -252,3 +252,23 @@ func Test_SetNested_ExistingNonState(t *testing.T) {
 	value := state.Get(Job)
 	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
 }
+
+func Test_GetNested_Existing(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]Key{Job, Title}, "Developer")
+	value := state.GetNested(Job, Title)
+	assert.Equal(t, "Developer", value)
+}
+
+func Test_GetNested_NonExistent(t *testing.T) {
+	state := DefaultState()
+	value := state.GetNested(Job, Title)
+	assert.Nil(t, value)
+}
+
+func Test_GetNested_ExistentNonState(t *testing.T) {
+	state := DefaultState()
+	state.Set(Job, "foo")
+	value := state.GetNested(Job, Title)
+	assert.Nil(t, value)
+}

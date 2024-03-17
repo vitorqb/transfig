@@ -147,6 +147,24 @@ func (s *State) Get(key Key) interface{} {
 	return key.ExtractFrom(s.values)
 }
 
+func (s *State) GetNested(keys ...Key) interface{} {
+	if len(keys) == 0 {
+		return nil
+	}
+	if len(keys) == 1 {
+		return s.Get(keys[0])
+	}
+	topKey := keys[0]
+	topValue, exists := s.values[topKey]
+	if !exists {
+		return nil
+	}
+	if topValueState, ok := topValue.(*State); ok {
+		return topValueState.GetNested(keys[1:]...)
+	}
+	return nil
+}
+
 func (s *State) Subscribe(subscription *Subscription) {
 	s.subscriptions[subscription.name] = subscription
 }

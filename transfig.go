@@ -123,6 +123,26 @@ func (s *State) Set(key Key, value interface{}) {
 	s.notifySubscribers(key)
 }
 
+// SetNested sets a value in a nested state. The state is created on
+// the fly if it doesn't exist, or if the current value is not a state.
+func (s *State) SetNested(keys []Key, value interface{}) {
+	if len(keys) == 0 {
+		return
+	}
+	if len(keys) == 1 {
+		s.Set(keys[0], value)
+		return
+	}
+	topKey := keys[0]
+	topValue := s.values[topKey]
+	_, topIsState := topValue.(*State)
+	if topValue == nil || !topIsState {
+		topValue = NewState()
+		s.Set(topKey, topValue)
+	}
+	topValue.(*State).SetNested(keys[1:], value)
+}
+
 func (s *State) Get(key Key) interface{} {
 	return key.ExtractFrom(s.values)
 }

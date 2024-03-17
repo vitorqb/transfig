@@ -228,3 +228,27 @@ func Test_Set_SetSubstateTwiceWithDifferentValues(t *testing.T) {
 	expCallArgs := map[Key]interface{}{Job: map[Key]interface{}{Title: "Manager"}}
 	assert.Equal(t, expCallArgs, callbcackArgs)
 }
+
+func Test_SetNested_NewState(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]Key{Job, Title}, "Developer")
+	value := state.Get(Job)
+	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
+}
+
+func Test_SetNested_ExistingState(t *testing.T) {
+	state := DefaultState()
+	jobState := NewState()
+	state.Set(Job, jobState)
+	state.SetNested([]Key{Job, Title}, "Developer")
+	value := state.Get(Job)
+	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
+}
+
+func Test_SetNested_ExistingNonState(t *testing.T) {
+	state := DefaultState()
+	state.Set(Job, "foo")
+	state.SetNested([]Key{Job, Title}, "Developer")
+	value := state.Get(Job)
+	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
+}

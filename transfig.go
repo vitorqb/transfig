@@ -1,13 +1,59 @@
 // Transfig is a library that aims at providing a reactiful state, similar to what is found in
 // React for the JS world.
-
 package transfig
 
-import "github.com/google/uuid"
+import (
+	"reflect"
+)
 
-// Key represents a key pointing to a value in the state
-type Key interface {
-	ExtractFrom(map[Key]interface{}) interface{}
+// KeyValIter is an iterator for (key, value) pairs.
+type KeyValIter func() (key KeyString, value interface{}, finished bool)
+
+// Path is a sequence of KeyString to access a nested value in a state
+type Path = []KeyString
+
+// Selector is an interface to select (key, value) pairs from the state.
+type Selector interface {
+	// Select returns an iterator for the selected (key, value) pairs.
+	Select(map[KeyString]interface{}) KeyValIter
+	// Contains returns true if the selector contains a path of KeyStrings.
+	Contains(Path) bool
+}
+
+// NestedSelector is a Selector for a nested value in the state
+type NestedSelector struct {
+	keys Path
+}
+
+func (s NestedSelector) Select(m map[KeyString]interface{}) KeyValIter {
+	called := false
+	return func() (key KeyString, value interface{}, finished bool) {
+		if called || len(s.keys) == 0 {
+			return key, nil, true
+		}
+		called = true
+		if len(s.keys) == 1 {
+			return s.keys[0], m[s.keys[0]], false
+		}
+		topKey, restKeys := s.keys[0], s.keys[1:]
+		topValue := m[topKey]
+		topValueAsMap, ok := topValue.(map[KeyString]interface{})
+		if !ok {
+			topValueAsMap = make(map[KeyString]interface{})
+		}
+		restIt := NestedSelector{restKeys}.Select(topValueAsMap)
+		nestedKey, nestedValue, _ := restIt()
+		return s.keys[0], map[KeyString]interface{}{nestedKey: nestedValue}, false
+	}
+}
+
+func (s NestedSelector) Contains(p Path) bool {
+	for i, k := range p {
+		if s.keys[i] != k {
+			return false
+		}
+	}
+	return true
 }
 
 // StringKey is a string representing a specific key in the state. When used in
@@ -15,50 +61,64 @@ type Key interface {
 // where `key` is the string and `value` is the value in the state.
 type KeyString string
 
-// ExtractFrom for a KeyString looks for the key in the state and returns its value.
-// If the key is not found, it returns nil. If the value is a nested state, it will
-// return a map with all values in the nested state.
-func (k KeyString) ExtractFrom(state map[Key]interface{}) interface{} {
-	value, exists := state[k]
-	if !exists {
-		return nil
+// KeyString implements Selector for a single key
+func (k KeyString) Select(m map[KeyString]interface{}) KeyValIter {
+	called := false
+	return func() (key KeyString, value interface{}, finished bool) {
+		if called {
+			return key, nil, true
+		}
+		called = true
+		return k, m[k], false
 	}
-	if stateValue, ok := value.(*State); ok {
-		return Wildcard.ExtractFrom(stateValue.values)
-	}
-	return value
 }
 
-// keyWildcard is a special key that represents all keys in the state. When used in
-// a subscription, it will add a `key: value` pair to the subscription's arguments,
-// where `key` is wildcard itself and `value` is a map with all values in the state.
-// Nested states will be represented as maps as well.
-type keyWildcard struct{}
-
-// ExtractFrom for a keyWildcard returns the entire state.
-func (k keyWildcard) ExtractFrom(state map[Key]interface{}) interface{} {
-	out := make(map[Key]interface{})
-	for k := range state {
-		out[k] = k.ExtractFrom(state)
+func (k KeyString) Contains(p Path) bool {
+	if len(p) == 0 {
+		return false
 	}
-	return out
+	return p[0] == k
 }
 
-var Wildcard = keyWildcard{}
+// Wildcard is a special Selector that selects all keys
+type Wildcard struct{}
 
-type SubscriptionCallback func(map[Key]interface{})
+func (Wildcard) Select(m map[KeyString]interface{}) KeyValIter {
+	keys := Path{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return func() (key KeyString, value interface{}, finished bool) {
+		if len(keys) == 0 {
+			return "", nil, true
+		}
+		firstKey := keys[0]
+		keys = keys[1:]
+		return firstKey, m[firstKey], false
+	}
+}
+
+func (Wildcard) Contains(Path) bool { return true }
+
+type SubscriptionCallback func(map[KeyString]interface{})
 
 // Subscription represents a func that will be called when the state changes
 // for specific keys of the state.
 type Subscription struct {
 	name      string
-	keys      []Key
+	selectors []Selector
 	callbacks []SubscriptionCallback
 }
 
-// With adds keys to the subscription
-func (s *Subscription) With(keys ...Key) *Subscription {
-	s.keys = append(s.keys, keys...)
+// With add keys selectors to the subscription
+func (s *Subscription) With(selector Selector) *Subscription {
+	s.selectors = append(s.selectors, selector)
+	return s
+}
+
+// WithNested allows subscribing to nested values in the state
+func (s *Subscription) WithNested(keys ...KeyString) *Subscription {
+	s.selectors = append(s.selectors, NestedSelector{keys})
 	return s
 }
 
@@ -68,133 +128,113 @@ func (s *Subscription) Calls(callback SubscriptionCallback) *Subscription {
 	return s
 }
 
-func (s *Subscription) subscribedTo(key Key) bool {
-	for _, k := range s.keys {
-		if k == Wildcard {
-			return true
-		}
-		if k == key {
+func (s *Subscription) subscribedTo(p Path) bool {
+	for _, s := range s.selectors {
+		if s.Contains(p) {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *Subscription) notify(values map[Key]interface{}) {
-	args := make(map[Key]interface{})
-	for _, k := range s.keys {
-		value := k.ExtractFrom(values)
-		args[k] = value
+// notify calls the subscription's callbacks with the subscribed values
+func (s *Subscription) notify(values map[KeyString]interface{}) {
+	args := make(map[KeyString]interface{})
+	for _, selector := range s.selectors {
+		it := selector.Select(values)
+		for {
+			key, value, finished := it()
+			if finished {
+				break
+			}
+			args[key] = value
+		}
 	}
 	for _, callback := range s.callbacks {
 		callback(args)
 	}
 }
 
+// NewSubscription creates a new subscription
 func NewSubscription(name string) *Subscription {
 	return &Subscription{
 		name:      name,
-		keys:      make([]Key, 0),
 		callbacks: make([]SubscriptionCallback, 0),
 	}
 }
 
+// State represents a potentially nested key -> value state that can
+// be subscribed to and updated.
 type State struct {
-	subscriptions                 map[string]*Subscription
-	values                        map[Key]interface{}
-	nestedStatesSubscriptionNames map[Key]string
+	subscriptions map[string]*Subscription
+	values        map[KeyString]interface{}
 }
 
-func (s *State) Set(key Key, value interface{}) {
-	if value == s.values[key] {
+// Set updates the state with a new value for a specific key
+func (s *State) Set(key KeyString, value interface{}) {
+	s.SetNested(Path{key}, value)
+}
+
+// SetNested updates the state with a new value for a nested key
+func (s *State) SetNested(path Path, value interface{}) {
+	oldValue, found := MapGetNested(s.values, path)
+	if found && reflect.DeepEqual(oldValue, value) {
 		return
 	}
-	if oldVal, ok := s.values[key]; ok {
-		if oldStateVal, ok := oldVal.(*State); ok {
-			if subName, ok := s.nestedStatesSubscriptionNames[key]; ok {
-				oldStateVal.Unsubscribe(subName)
+	MapSetNested(s.values, path, value)
+	notifiedSubs := make(map[string]bool)
+	for _, sub := range s.subscriptions {
+		if sub.subscribedTo(path) {
+			if _, ok := notifiedSubs[sub.name]; !ok {
+				notifiedSubs[sub.name] = true
+				sub.notify(s.values)
 			}
 		}
 	}
-	s.values[key] = value
-	if stateValue, ok := value.(*State); ok {
-		s.subscribeToNestedState(key, stateValue)
-	}
-	s.notifySubscribers(key)
 }
 
-// SetNested sets a value in a nested state. The state is created on
-// the fly if it doesn't exist, or if the current value is not a state.
-func (s *State) SetNested(keys []Key, value interface{}) {
+// Get returns the value for a specific key
+func (s *State) Get(key KeyString) (value interface{}, found bool) {
+	value, found = s.values[key]
+	return value, found
+}
+
+// GetNested returns the value for a nested key
+func (s *State) GetNested(keys ...KeyString) (value interface{}, found bool) {
 	if len(keys) == 0 {
-		return
+		return nil, false
 	}
-	if len(keys) == 1 {
-		s.Set(keys[0], value)
-		return
+	topKey, restKeys := keys[0], keys[1:]
+	value, found = s.values[topKey]
+	for _, k := range restKeys {
+		if valueAsMap, ok := value.(map[KeyString]interface{}); ok {
+			value = valueAsMap[k]
+		} else {
+			return nil, false
+		}
 	}
-	topKey := keys[0]
-	topValue := s.values[topKey]
-	_, topIsState := topValue.(*State)
-	if topValue == nil || !topIsState {
-		topValue = NewState()
-		s.Set(topKey, topValue)
-	}
-	topValue.(*State).SetNested(keys[1:], value)
+	return value, found
 }
 
-func (s *State) Get(key Key) interface{} {
-	return key.ExtractFrom(s.values)
-}
-
-func (s *State) GetNested(keys ...Key) interface{} {
-	if len(keys) == 0 {
-		return nil
-	}
-	if len(keys) == 1 {
-		return s.Get(keys[0])
-	}
-	topKey := keys[0]
-	topValue, exists := s.values[topKey]
-	if !exists {
-		return nil
-	}
-	if topValueState, ok := topValue.(*State); ok {
-		return topValueState.GetNested(keys[1:]...)
-	}
-	return nil
-}
-
+// Subscribe adds a subscription to the state
 func (s *State) Subscribe(subscription *Subscription) {
 	s.subscriptions[subscription.name] = subscription
 }
 
+// Unsubscribe removes a subscription from the state
 func (s *State) Unsubscribe(subscriptionName string) {
 	delete(s.subscriptions, subscriptionName)
 }
 
-func (s *State) subscribeToNestedState(key Key, state *State) {
-	subName := uuid.New().String()
-	sub := NewSubscription(subName).With(Wildcard).Calls(func(_ map[Key]interface{}) {
-		s.notifySubscribers(key)
-	})
-	s.nestedStatesSubscriptionNames[key] = subName
-	state.Subscribe(sub)
-}
-
-func (s *State) notifySubscribers(key Key) {
-	for _, sub := range s.subscriptions {
-		if sub.subscribedTo(key) {
-			sub.notify(s.values)
-		}
-	}
+// AsMap returns a copy of the state as a map
+func (s *State) AsMap() map[KeyString]interface{} {
+	return MapDeepCopy(s.values)
 }
 
 // NewState creates a new state
 func NewState() *State {
 	return &State{
-		subscriptions:                 make(map[string]*Subscription),
-		values:                        make(map[Key]interface{}),
-		nestedStatesSubscriptionNames: make(map[Key]string),
+		subscriptions: make(map[string]*Subscription),
+		values:        make(map[KeyString]interface{}),
 	}
 }

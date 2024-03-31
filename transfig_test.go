@@ -7,12 +7,13 @@ import (
 )
 
 var (
-	Name         Key = KeyString("name")
-	Age          Key = KeyString("age")
-	Job          Key = KeyString("job")
-	Title        Key = KeyString("title")
-	Compensation Key = KeyString("compensation")
-	Ammount      Key = KeyString("ammount")
+	Name         = KeyString("name")
+	Age          = KeyString("age")
+	Job          = KeyString("job")
+	Title        = KeyString("title")
+	Compensation = KeyString("compensation")
+	Ammount      = KeyString("ammount")
+	MissingKey   = KeyString("missingKey")
 )
 
 func DefaultState() *State {
@@ -22,110 +23,67 @@ func DefaultState() *State {
 	return x
 }
 
-func Test_Get(t *testing.T) {
-	state := DefaultState()
-	name := state.Get(Name)
-	assert.Equal(t, "John", name.(string))
-}
-
-func Test_Get_NonExistentKey(t *testing.T) {
-	state := DefaultState()
-	value := state.Get(KeyString("nonExistent"))
-	assert.Nil(t, value)
-}
-
-func Test_Get_Wildcard(t *testing.T) {
-	state := DefaultState()
-	value := state.Get(Wildcard)
-	assert.Equal(t, map[Key]interface{}{Name: "John", Age: 30}, value)
-}
-
-func Test_Get_NestedState(t *testing.T) {
-	state := DefaultState()
-	subState := NewState()
-	state.Set(Job, subState)
-	subState.Set(Title, "Developer")
-	value := state.Get(Job)
-	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
-}
-
-func Test_Get_WildcardWithNestedState(t *testing.T) {
-	state := DefaultState()
-	subState := NewState()
-	state.Set(Job, subState)
-	subState.Set(Title, "Developer")
-	value := state.Get(Wildcard)
-	assert.Equal(t, map[Key]interface{}{
-		Name: "John",
-		Age:  30,
-		Job: map[Key]interface{}{
-			Title: "Developer",
-		}},
-		value,
-	)
-}
-
 func Test_Subscribe_OneVariable(t *testing.T) {
 	state := DefaultState()
-	callbackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) {
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) {
 		callbackArgs = args
 	}
 	sub := NewSubscription("subName").With(Name).Calls(callback)
 	state.Subscribe(sub)
 	state.Set(Name, "Mike")
-	expCallArgs := map[Key]interface{}{Name: "Mike"}
+	expCallArgs := map[KeyString]interface{}{Name: "Mike"}
 	assert.Equal(t, expCallArgs, callbackArgs)
 }
 
 func Test_Subscribe_TwoVariable(t *testing.T) {
 	state := DefaultState()
-	callbackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) {
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) {
 		callbackArgs = args
 	}
-	sub := NewSubscription("subName").With(Name, Age).Calls(callback)
+	sub := NewSubscription("subName").With(Name).With(Age).Calls(callback)
 	state.Subscribe(sub)
 	state.Set(Name, "Mike")
-	expCallArgs := map[Key]interface{}{Name: "Mike", Age: 30}
+	expCallArgs := map[KeyString]interface{}{Name: "Mike", Age: 30}
 	assert.Equal(t, expCallArgs, callbackArgs)
 }
 
 func Test_Subscribe_MissingVariable(t *testing.T) {
 	state := DefaultState()
-	callbackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) {
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) {
 		callbackArgs = args
 	}
 	missingKey := KeyString("NON_EXISTANT")
-	sub := NewSubscription("subName").With(Name, missingKey).Calls(callback)
+	sub := NewSubscription("subName").With(Name).With(missingKey).Calls(callback)
 	state.Subscribe(sub)
 	state.Set(Name, "Mike")
-	expCallArgs := map[Key]interface{}{Name: "Mike", missingKey: nil}
+	expCallArgs := map[KeyString]interface{}{Name: "Mike", missingKey: nil}
 	assert.Equal(t, expCallArgs, callbackArgs)
 }
 
 func Test_Subscribe_Wildcard(t *testing.T) {
 	state := DefaultState()
-	callbackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) { callbackArgs = args }
-	sub := NewSubscription("subName").With(Wildcard).Calls(callback)
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
+	sub := NewSubscription("subName").With(Wildcard{}).Calls(callback)
 	state.Subscribe(sub)
 	state.Set(Name, "Mike")
-	expCallArgs := map[Key]interface{}{Wildcard: map[Key]interface{}{Name: "Mike", Age: 30}}
+	expCallArgs := map[KeyString]interface{}{Name: "Mike", Age: 30}
 	assert.Equal(t, expCallArgs, callbackArgs)
 }
 
 func Test_Subscribe_TwoCallbacks(t *testing.T) {
 	state := DefaultState()
-	callbackArgs1 := make(map[Key]interface{})
-	callback1 := func(args map[Key]interface{}) { callbackArgs1 = args }
-	callbackArgs2 := make(map[Key]interface{})
-	callback2 := func(args map[Key]interface{}) { callbackArgs2 = args }
+	callbackArgs1 := make(map[KeyString]interface{})
+	callback1 := func(args map[KeyString]interface{}) { callbackArgs1 = args }
+	callbackArgs2 := make(map[KeyString]interface{})
+	callback2 := func(args map[KeyString]interface{}) { callbackArgs2 = args }
 	sub := NewSubscription("subName").With(Name).Calls(callback1).Calls(callback2)
 	state.Subscribe(sub)
 	state.Set(Name, "Mike")
-	expCallArgs := map[Key]interface{}{Name: "Mike"}
+	expCallArgs := map[KeyString]interface{}{Name: "Mike"}
 	assert.Equal(t, expCallArgs, callbackArgs1)
 	assert.Equal(t, expCallArgs, callbackArgs2)
 }
@@ -133,7 +91,7 @@ func Test_Subscribe_TwoCallbacks(t *testing.T) {
 func Test_Subscribe_NotCalledIfNotSubscribed(t *testing.T) {
 	state := DefaultState()
 	callbackCalled := false
-	callback := func(args map[Key]interface{}) { callbackCalled = true }
+	callback := func(args map[KeyString]interface{}) { callbackCalled = true }
 	sub := NewSubscription("subName").With(Name).Calls(callback)
 	state.Subscribe(sub)
 	anotherKey := KeyString("NOT_NAME")
@@ -141,134 +99,283 @@ func Test_Subscribe_NotCalledIfNotSubscribed(t *testing.T) {
 	assert.False(t, callbackCalled)
 }
 
-func Test_Subscribe_NestedState(t *testing.T) {
+func Test_Subscribe_NestedValue(t *testing.T) {
 	state := DefaultState()
-	subState := NewState()
-	state.Set(Job, subState)
+	state.SetNested([]KeyString{Job, Title}, "Developer")
 
-	callbackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) { callbackArgs = args }
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
 
 	sub := NewSubscription("subName").With(Job).Calls(callback)
 	state.Subscribe(sub)
+	state.SetNested([]KeyString{Job, Title}, "Manager")
 
-	subState.Set(Title, "Developer")
-
-	expCallArg := map[Key]interface{}{Job: map[Key]interface{}{Title: "Developer"}}
+	expCallArg := map[KeyString]interface{}{Job: map[KeyString]interface{}{Title: "Manager"}}
 	assert.Equal(t, expCallArg, callbackArgs)
 }
 
 func Test_Subscribe_TwoNestedState(t *testing.T) {
 	state := DefaultState()
-	jobState := NewState()
-	compensationState := NewState()
-	state.Set(Job, jobState)
-	jobState.Set(Compensation, compensationState)
+	state.SetNested([]KeyString{Job, Title}, "Dev")
 
-	callbackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) { callbackArgs = args }
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
 
 	sub := NewSubscription("subName").With(Job).Calls(callback)
 	state.Subscribe(sub)
 
-	compensationState.Set(Ammount, 1000)
+	state.SetNested([]KeyString{Job, Compensation, Ammount}, 1000)
 
-	expCallArg := map[Key]interface{}{Job: map[Key]interface{}{Compensation: map[Key]interface{}{Ammount: 1000}}}
+	expCallArg := map[KeyString]interface{}{
+		Job: map[KeyString]interface{}{
+			Title: "Dev",
+			Compensation: map[KeyString]interface{}{
+				Ammount: 1000,
+			},
+		},
+	}
 	assert.Equal(t, expCallArg, callbackArgs)
 }
 
 func Test_Subscribe_NestedStateWithWildcard(t *testing.T) {
 	state := DefaultState()
-	subState := NewState()
-	state.Set(Job, subState)
+	jobMap := map[KeyString]interface{}{Title: "Developer"}
+	state.Set(Job, jobMap)
 	callCount := 0
-	callback := func(args map[Key]interface{}) { callCount++ }
+	callback := func(args map[KeyString]interface{}) { callCount++ }
 
-	sub := NewSubscription("subName").With(Wildcard).Calls(callback)
+	sub := NewSubscription("subName").With(Wildcard{}).Calls(callback)
 	state.Subscribe(sub)
 
-	subState.Set(Title, "Developer")
+	state.SetNested([]KeyString{Title}, "Developer")
 
 	assert.Equal(t, 1, callCount)
 }
 
+func Test_Subscribe_WithNested(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Job, Title}, "Developer")
+
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
+
+	sub := NewSubscription("subName").WithNested(Job, Title).Calls(callback)
+	state.Subscribe(sub)
+	state.SetNested([]KeyString{Job, Title}, "Manager")
+
+	expCallArg := map[KeyString]interface{}{Job: map[KeyString]interface{}{Title: "Manager"}}
+	assert.Equal(t, expCallArg, callbackArgs)
+}
+
+func Test_Subscribe_WithNestedThreeLong(t *testing.T) {
+	state := DefaultState()
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
+
+	sub := NewSubscription("subName").WithNested(Job, Compensation, Ammount).Calls(callback)
+	state.Subscribe(sub)
+	state.SetNested([]KeyString{Job, Compensation, Ammount}, 1000)
+
+	expCallArg := map[KeyString]interface{}{
+		Job: map[KeyString]interface{}{
+			Compensation: map[KeyString]interface{}{
+				Ammount: 1000,
+			},
+		},
+	}
+	assert.Equal(t, expCallArg, callbackArgs)
+}
+
+func Test_Subscribe_WithNestedModfyingTop(t *testing.T) {
+	state := DefaultState()
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
+
+	sub := NewSubscription("subName").WithNested(Job, Compensation, Ammount).Calls(callback)
+	state.Subscribe(sub)
+
+	state.Set(Job, map[KeyString]interface{}{})
+
+	expCallArg := map[KeyString]interface{}{
+		Job: map[KeyString]interface{}{
+			Compensation: map[KeyString]interface{}{
+				Ammount: nil,
+			},
+		},
+	}
+	assert.Equal(t, expCallArg, callbackArgs)
+}
+
+func Test_Subscribe_WithNestedRepeatedKeys(t *testing.T) {
+	state := DefaultState()
+	callbackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbackArgs = args }
+
+	KeyFoo := KeyString("foo")
+	KeyBar := KeyString("bar")
+	sub := NewSubscription("subName").WithNested(KeyFoo, KeyBar).Calls(callback)
+	state.Subscribe(sub)
+
+	state.Set(KeyBar, "Bar")
+
+	expCallArg := map[KeyString]interface{}{}
+	assert.Equal(t, expCallArg, callbackArgs)
+}
+
+func Test_Subscribe_WithRepeatedKeysNestedMap(t *testing.T) {
+	state := DefaultState()
+	callbackCount := 0
+	callback := func(args map[KeyString]interface{}) { callbackCount++ }
+
+	KeyFoo := KeyString("foo")
+	KeyBar := KeyString("bar")
+	KeyBaz := KeyString("baz")
+	sub := NewSubscription("subName").WithNested(KeyFoo, KeyBar).Calls(callback)
+	state.Subscribe(sub)
+
+	state.SetNested([]KeyString{KeyFoo, KeyBar}, "1")
+	assert.Equal(t, 1, callbackCount)
+
+	state.Set(KeyBar, "2")
+	assert.Equal(t, 1, callbackCount)
+
+	state.SetNested([]KeyString{KeyFoo, KeyBaz}, "3")
+	assert.Equal(t, 1, callbackCount)
+}
+
 func Test_Set_SetSubstateTwice(t *testing.T) {
 	state := DefaultState()
-	subState := NewState()
-	state.Set(Job, subState)
+	subState := map[KeyString]interface{}{Title: "Developer"}
 	state.Set(Job, subState)
 
 	callCount := 0
-	callback := func(args map[Key]interface{}) { callCount++ }
+	callback := func(args map[KeyString]interface{}) { callCount++ }
 
-	sub := NewSubscription("subName").With(Wildcard).Calls(callback)
+	sub := NewSubscription("subName").With(Wildcard{}).Calls(callback)
 	state.Subscribe(sub)
 
-	subState.Set(Title, "Developer")
+	state.SetNested([]KeyString{Job, Title}, "Senior Developer")
 
 	assert.Equal(t, 1, callCount)
 }
 
 func Test_Set_SetSubstateTwiceWithDifferentValues(t *testing.T) {
 	state := DefaultState()
-	subState1 := NewState()
+	subState1 := map[KeyString]interface{}{Title: "Developer"}
 	state.Set(Job, subState1)
-	subState2 := NewState()
+	subState2 := map[KeyString]interface{}{Title: "Manager"}
 	state.Set(Job, subState2)
 
-	callbcackArgs := make(map[Key]interface{})
-	callback := func(args map[Key]interface{}) { callbcackArgs = args }
+	callbcackArgs := make(map[KeyString]interface{})
+	callback := func(args map[KeyString]interface{}) { callbcackArgs = args }
 
 	sub := NewSubscription("subName").With(Job).Calls(callback)
 	state.Subscribe(sub)
 
-	subState1.Set(Title, "Developer")
-	subState2.Set(Title, "Manager")
+	state.SetNested([]KeyString{Job, Title}, "Developer")
+	state.SetNested([]KeyString{Job, Title}, "Manager")
 
-	expCallArgs := map[Key]interface{}{Job: map[Key]interface{}{Title: "Manager"}}
+	expCallArgs := map[KeyString]interface{}{Job: map[KeyString]interface{}{Title: "Manager"}}
 	assert.Equal(t, expCallArgs, callbcackArgs)
 }
 
-func Test_SetNested_NewState(t *testing.T) {
+func Test_Get_Simple(t *testing.T) {
 	state := DefaultState()
-	state.SetNested([]Key{Job, Title}, "Developer")
-	value := state.Get(Job)
-	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
-}
-
-func Test_SetNested_ExistingState(t *testing.T) {
-	state := DefaultState()
-	jobState := NewState()
-	state.Set(Job, jobState)
-	state.SetNested([]Key{Job, Title}, "Developer")
-	value := state.Get(Job)
-	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
-}
-
-func Test_SetNested_ExistingNonState(t *testing.T) {
-	state := DefaultState()
-	state.Set(Job, "foo")
-	state.SetNested([]Key{Job, Title}, "Developer")
-	value := state.Get(Job)
-	assert.Equal(t, map[Key]interface{}{Title: "Developer"}, value)
-}
-
-func Test_GetNested_Existing(t *testing.T) {
-	state := DefaultState()
-	state.SetNested([]Key{Job, Title}, "Developer")
-	value := state.GetNested(Job, Title)
+	state.Set(Job, "Developer")
+	value, found := state.Get(Job)
+	assert.True(t, found)
 	assert.Equal(t, "Developer", value)
 }
 
-func Test_GetNested_NonExistent(t *testing.T) {
+func Test_Get_Missing(t *testing.T) {
 	state := DefaultState()
-	value := state.GetNested(Job, Title)
+	value, found := state.Get(MissingKey)
+	assert.False(t, found)
 	assert.Nil(t, value)
 }
 
-func Test_GetNested_ExistentNonState(t *testing.T) {
+func Test_GetNested_NoKeys(t *testing.T) {
 	state := DefaultState()
-	state.Set(Job, "foo")
-	value := state.GetNested(Job, Title)
+	value, found := state.GetNested()
+	assert.False(t, found)
 	assert.Nil(t, value)
+}
+
+func Test_GetNested_LenghtOne(t *testing.T) {
+	state := DefaultState()
+	value, found := state.GetNested(Name)
+	assert.True(t, found)
+	assert.Equal(t, "John", value)
+}
+
+func Test_GetNested_LenghtTwo(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Job, Title}, "Developer")
+	value, found := state.GetNested(Job, Title)
+	assert.True(t, found)
+	assert.Equal(t, "Developer", value)
+}
+
+func Test_GetNested_LenghtTwoMissing(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Job}, "Developer")
+	value, found := state.GetNested(Job, Title)
+	assert.False(t, found)
+	assert.Nil(t, value)
+}
+
+func Test_SetNested_Zero(t *testing.T) {
+	state := NewState()
+	state.SetNested([]KeyString{}, "Mike")
+	assert.Equal(t, map[KeyString]interface{}{}, state.AsMap())
+}
+
+func Test_SetNested_One(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Name}, "Mike")
+	value, found := state.Get(Name)
+	assert.True(t, found)
+	assert.Equal(t, "Mike", value)
+}
+
+func Test_SetNested_Two(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Job, Title}, "Developer")
+	value, found := state.GetNested(Job, Title)
+	assert.True(t, found)
+	assert.Equal(t, "Developer", value)
+}
+
+func Test_SetNested_OverrideExisting(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Job}, "Foo")
+	state.SetNested([]KeyString{Job, Title}, "Manager")
+	value, found := state.GetNested(Job, Title)
+	assert.True(t, found)
+	assert.Equal(t, "Manager", value)
+	topValue, topFound := state.Get(Job)
+	assert.True(t, topFound)
+	assert.Equal(t, map[KeyString]interface{}{Title: "Manager"}, topValue)
+}
+
+func Test_SetNested_KeepExistingNestedKeys(t *testing.T) {
+	state := DefaultState()
+	state.SetNested([]KeyString{Job, Title}, "Developer")
+	state.SetNested([]KeyString{Job, Compensation, Ammount}, 1000)
+	value, found := state.GetNested(Job, Compensation, Ammount)
+	assert.True(t, found)
+	assert.Equal(t, 1000, value)
+	titleValue, titleFound := state.GetNested(Job, Title)
+	assert.True(t, titleFound)
+	assert.Equal(t, "Developer", titleValue)
+	jobValue, jobFound := state.Get(Job)
+	assert.True(t, jobFound)
+	assert.Equal(
+		t,
+		map[KeyString]interface{}{
+			Title:        "Developer",
+			Compensation: map[KeyString]interface{}{Ammount: 1000},
+		},
+		jobValue,
+	)
 }

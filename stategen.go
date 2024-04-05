@@ -1,6 +1,7 @@
 package transfig
 
 import (
+	"fmt"
 	"reflect"
 
 	jen "github.com/dave/jennifer/jen"
@@ -17,6 +18,7 @@ type StringType string
 func (s StringType) String() string { return string(s) }
 type ReflectType struct { t reflect.Type }
 func (r ReflectType) String() string { return r.t.String() }
+func (r ReflectType) Type() reflect.Type { return r.t }
 
 func NewTypeWrapper(s interface{}) TypeWrapper {
 	if v, ok := s.(string); ok {
@@ -29,8 +31,12 @@ func NewTypeWrapper(s interface{}) TypeWrapper {
 }
 
 // StateGen generates a new state tree
-func StateGen(rootNode GenNode, package_ string, filepath string) error {
-	f := jen.NewFile(package_)
+func StateGen(
+	rootNode GenNode,
+	packagePath string,
+	filepath string,
+) error {
+	f := jen.NewFilePath(packagePath)
 	gen(Path{}, rootNode, f)
 	return f.Save(filepath)
 }
@@ -61,6 +67,12 @@ func gen(path Path, rootNode GenNode, f *jen.File) {
 			jenPath = append(jenPath, jen.Lit(string(k)))
 		}
 		jenPath = append(jenPath, jen.Lit(string(key)))
+		if reflectType, ok := nodeTypeWrapper.(ReflectType); ok {
+			if pkgPath := reflectType.t.PkgPath(); pkgPath != "" {
+				fmt.Println(pkgPath)
+				f.ImportName(pkgPath, "")
+			}
+		}
 
 		// Getter
 		f.Func().Params(jen.Id("s").Id(structName)).Id(key).Params().Id(nodeTypeWrapper.String()).Block(

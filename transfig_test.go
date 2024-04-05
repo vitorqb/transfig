@@ -416,3 +416,26 @@ func Test_ClearNested_FiresSubscriptions(t *testing.T) {
 
 	assert.Equal(t, 1, callCount)
 }
+
+func Test_GetArg(t *testing.T) {
+	state := DefaultState()
+	callCount := 0
+	callback := func(args CallbackArgs) {
+		callCount++
+		age, ageFound := GetArg[int](args, Age)
+		assert.True(t, ageFound)
+		assert.Equal(t, 30, age)
+		name, nameFound := GetArg[string](args, Name)
+		assert.True(t, nameFound)
+		assert.Equal(t, "Mike", name)
+		fake, fakeFound := GetArg[interface{}](args, KeyString("fake"))
+		assert.False(t, fakeFound)
+		assert.Nil(t, fake)
+		wrongType, wrongTypeFound := GetArg[int](args, Name)
+		assert.False(t, wrongTypeFound)
+		assert.Equal(t, 0, wrongType)
+	}
+	sub := NewSubscription("subName").With(Name).With(Age).Calls(callback)
+	state.Subscribe(sub)
+	state.Set(Name, "Mike")
+}

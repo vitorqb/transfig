@@ -16,11 +16,14 @@ type Path = []KeyString
 // passed to a subscription's callback
 type CallbackArgs map[KeyString]interface{}
 
-func (c CallbackArgs) Get(key KeyString) interface{} { return c[key] }
-
-func (c CallbackArgs) GetNested(keys ...KeyString) interface{} {
-	value, _ := mapGetNested(c, keys)
-	return value
+func GetArg[T interface{}](args CallbackArgs, keys ...KeyString) (T, bool) {
+	var zero T
+	if v, found := mapGetNested(args, keys); found {
+		if vAsT, ok := v.(T); ok {
+			return vAsT, true
+		}
+	}
+	return zero, false
 }
 
 // Selector is an interface to select (key, value) pairs from the state.

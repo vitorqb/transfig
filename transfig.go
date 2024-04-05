@@ -18,7 +18,7 @@ type CallbackArgs map[KeyString]interface{}
 
 func (c CallbackArgs) Get(key KeyString) interface{} { return c[key] }
 
-func (c CallbackArgs) GetNested(keys... KeyString) interface{} {
+func (c CallbackArgs) GetNested(keys ...KeyString) interface{} {
 	value, _ := mapGetNested(c, keys)
 	return value
 }
@@ -204,6 +204,27 @@ func (s *State) SetNested(path Path, value interface{}) {
 	}
 }
 
+// ClearNested removes a nested key from the state
+func (s *State) ClearNested(path Path) {
+	if len(path) == 0 {
+		return
+	}
+	_, found := mapGetNested(s.values, path)
+	if !found {
+		return
+	}
+	mapClearNested(s.values, path)
+	notifiedSubs := make(map[string]bool)
+	for _, sub := range s.subscriptions {
+		if sub.subscribedTo(path) {
+			if _, ok := notifiedSubs[sub.name]; !ok {
+				notifiedSubs[sub.name] = true
+				sub.notify(s.values)
+			}
+		}
+	}
+}
+
 // Get returns the value for a specific key
 func (s *State) Get(key KeyString) (value interface{}, found bool) {
 	value, found = s.values[key]
@@ -212,19 +233,7 @@ func (s *State) Get(key KeyString) (value interface{}, found bool) {
 
 // GetNested returns the value for a nested key
 func (s *State) GetNested(keys ...KeyString) (value interface{}, found bool) {
-	if len(keys) == 0 {
-		return nil, false
-	}
-	topKey, restKeys := keys[0], keys[1:]
-	value, found = s.values[topKey]
-	for _, k := range restKeys {
-		if valueAsMap, ok := value.(map[KeyString]interface{}); ok {
-			value = valueAsMap[k]
-		} else {
-			return nil, false
-		}
-	}
-	return value, found
+	return mapGetNested(s.values, keys)
 }
 
 // Subscribe adds a subscription to the state

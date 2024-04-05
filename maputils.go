@@ -46,3 +46,18 @@ func mapGetNested(m map[KeyString]interface{}, keys []KeyString) (value interfac
 	}
 	return nil, false
 }
+
+// mapClearNested clears a nested key in a map
+func mapClearNested(m map[KeyString]interface{}, keys []KeyString) {
+	if len(keys) == 0 {
+		return
+	}
+	if len(keys) == 1 {
+		delete(m, keys[0])
+		return
+	}
+	topValue := m[keys[0]]
+	if topValueAsMap, ok := topValue.(map[KeyString]interface{}); ok {
+		mapClearNested(topValueAsMap, keys[1:])
+	}
+}

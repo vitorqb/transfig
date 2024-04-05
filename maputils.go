@@ -1,11 +1,11 @@
 package transfig
 
 // Helper functions that work with maps
-func MapDeepCopy(m map[KeyString]interface{}) map[KeyString]interface{} {
+func mapDeepCopy(m map[KeyString]interface{}) map[KeyString]interface{} {
 	newMap := make(map[KeyString]interface{})
 	for k, v := range m {
 		if vAsMap, ok := v.(map[KeyString]interface{}); ok {
-			newMap[k] = MapDeepCopy(vAsMap)
+			newMap[k] = mapDeepCopy(vAsMap)
 		} else {
 			newMap[k] = v
 		}
@@ -13,8 +13,8 @@ func MapDeepCopy(m map[KeyString]interface{}) map[KeyString]interface{} {
 	return newMap
 }
 
-// MapSetNested sets a nested key in a map
-func MapSetNested(m map[KeyString]interface{}, keys []KeyString, value interface{}) {
+// mapSetNested sets a nested key in a map
+func mapSetNested(m map[KeyString]interface{}, keys []KeyString, value interface{}) {
 	if len(keys) == 0 {
 		return
 	}
@@ -27,12 +27,12 @@ func MapSetNested(m map[KeyString]interface{}, keys []KeyString, value interface
 	if !topValueIsMap {
 		topValueAsMap = make(map[KeyString]interface{})
 	}
-	MapSetNested(topValueAsMap, keys[1:], value)
+	mapSetNested(topValueAsMap, keys[1:], value)
 	m[keys[0]] = topValueAsMap
 }
 
-// MapGetNested gets a nested key in a map
-func MapGetNested(m map[KeyString]interface{}, keys []KeyString) (value interface{}, found bool) {
+// mapGetNested gets a nested key in a map
+func mapGetNested(m map[KeyString]interface{}, keys []KeyString) (value interface{}, found bool) {
 	if len(keys) == 0 {
 		return nil, false
 	}
@@ -42,7 +42,7 @@ func MapGetNested(m map[KeyString]interface{}, keys []KeyString) (value interfac
 	}
 	topValue := m[keys[0]]
 	if topValueAsMap, ok := topValue.(map[KeyString]interface{}); ok {
-		return MapGetNested(topValueAsMap, keys[1:])
+		return mapGetNested(topValueAsMap, keys[1:])
 	}
 	return nil, false
 }

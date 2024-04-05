@@ -12,6 +12,17 @@ type KeyValIter func() (key KeyString, value interface{}, finished bool)
 // Path is a sequence of KeyString to access a nested value in a state
 type Path = []KeyString
 
+// CallbackArgs is a map of KeyString to interface{} that is
+// passed to a subscription's callback
+type CallbackArgs map[KeyString]interface{}
+
+func (c CallbackArgs) Get(key KeyString) interface{} { return c[key] }
+
+func (c CallbackArgs) GetNested(keys... KeyString) interface{} {
+	value, _ := mapGetNested(c, keys)
+	return value
+}
+
 // Selector is an interface to select (key, value) pairs from the state.
 type Selector interface {
 	// Select returns an iterator for the selected (key, value) pairs.
@@ -100,7 +111,7 @@ func (Wildcard) Select(m map[KeyString]interface{}) KeyValIter {
 
 func (Wildcard) Contains(Path) bool { return true }
 
-type SubscriptionCallback func(map[KeyString]interface{})
+type SubscriptionCallback func(CallbackArgs)
 
 // Subscription represents a func that will be called when the state changes
 // for specific keys of the state.
@@ -139,7 +150,7 @@ func (s *Subscription) subscribedTo(p Path) bool {
 
 // notify calls the subscription's callbacks with the subscribed values
 func (s *Subscription) notify(values map[KeyString]interface{}) {
-	args := make(map[KeyString]interface{})
+	args := make(CallbackArgs)
 	for _, selector := range s.selectors {
 		it := selector.Select(values)
 		for {
@@ -177,11 +188,11 @@ func (s *State) Set(key KeyString, value interface{}) {
 
 // SetNested updates the state with a new value for a nested key
 func (s *State) SetNested(path Path, value interface{}) {
-	oldValue, found := MapGetNested(s.values, path)
+	oldValue, found := mapGetNested(s.values, path)
 	if found && reflect.DeepEqual(oldValue, value) {
 		return
 	}
-	MapSetNested(s.values, path, value)
+	mapSetNested(s.values, path, value)
 	notifiedSubs := make(map[string]bool)
 	for _, sub := range s.subscriptions {
 		if sub.subscribedTo(path) {
@@ -227,8 +238,8 @@ func (s *State) Unsubscribe(subscriptionName string) {
 }
 
 // AsMap returns a copy of the state as a map
-func (s *State) AsMap() map[KeyString]interface{} {
-	return MapDeepCopy(s.values)
+func (s *State) AsMap() CallbackArgs {
+	return mapDeepCopy(s.values)
 }
 
 // NewState creates a new state

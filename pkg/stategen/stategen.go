@@ -42,10 +42,7 @@ func gen(path Path, rootNode GenNode, f *jen.File) error {
 			}
 			continue
 		}
-		jenPath := []jen.Code{}
-		for _, k := range path {
-			jenPath = append(jenPath, jen.Lit(string(k)))
-		}
+		jenPath := pathToCode(path)
 		jenPath = append(jenPath, jen.Lit(string(key)))
 		if nodeAsType, ok := node.(reflect.Type); ok {
 			varType := typeFor(nodeAsType)
@@ -81,18 +78,23 @@ func stateStructName(path Path) string {
 func stateStruct(path Path) *jen.Statement {
 	return jen.Type().Id(stateStructName(path)).Struct(
 		jen.Op("*").Qual(TransfigImportPath, "State"),
+		jen.Qual(TransfigImportPath, "Path"),
 	)
 }
 
 func constructorFunc(path Path) *jen.Statement {
+	jenPath := pathToCode(path)
 	return jen.Func().Id("New").Params(jen.Id("s").Op("*").Qual(TransfigImportPath, "State")).Op("*").Id(stateStructName(path)).Block(
-		jen.Return(jen.Op("&").Id(stateStructName(path))).Values(jen.Id("s")),
+		jen.Id("p").Op(":=").Qual(TransfigImportPath, "Path").Values(jenPath...),
+		jen.Return(jen.Op("&").Id(stateStructName(path))).Values(jen.Id("s"), jen.Id("p")),
 	)
 }
 
 func constructorFromArgsFunc(path Path) *jen.Statement {
+	jenPath := pathToCode(path)
 	return jen.Func().Id("FromArgs").Params(jen.Id("args").Qual(TransfigImportPath, "CallbackArgs")).Op("*").Id("NewState").Block(
-		jen.Return(jen.Op("&").Id("NewState").Values(jen.Qual(TransfigImportPath, "NewStateFromMap").Call(jen.Id("args")))),
+		jen.Id("p").Op(":=").Qual(TransfigImportPath, "Path").Values(jenPath...),
+		jen.Return(jen.Op("&").Id("NewState").Values(jen.Qual(TransfigImportPath, "NewStateFromMap").Call(jen.Id("args")), jen.Id("p"))),
 	)
 }
 
@@ -101,7 +103,8 @@ func subStateGetter(newPath Path) *jen.Statement {
 	rootPath := newPath[:len(newPath)-1]
 	subStructName := stateStructName(newPath)
 	return jen.Func().Params(jen.Id("s").Op("*").Id(stateStructName(rootPath))).Id(key).Params().Op("*").Id(subStructName).Block(
-		jen.Return(jen.Op("&").Id(subStructName)).Values(jen.Id("s").Dot("State")),
+		jen.Id("p").Op(":=").Qual(TransfigImportPath, "Path").Values(pathToCode(newPath)...),
+		jen.Return(jen.Op("&").Id(subStructName)).Values(jen.Id("s").Dot("State"), jen.Id("p")),
 	)
 }
 
@@ -117,4 +120,12 @@ func typeFor(node reflect.Type) (o *jen.Statement) {
 		o.Add(jen.Id(node.String()))
 	}
 	return
+}
+
+func pathToCode(path Path) []jen.Code {
+	jenPath := []jen.Code{}
+	for _, k := range path {
+		jenPath = append(jenPath, jen.Lit(string(k)))
+	}
+	return jenPath
 }

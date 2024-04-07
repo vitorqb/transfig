@@ -26,7 +26,9 @@ func Test_StateStruct_ZeroPath(t *testing.T) {
 	f.Add(StateStruct(path))
 	result := renderToString(t, f)
 	assert.Contains(t, result, "import transfig \"github.com/vitorqb/transfig\"")
-	assert.Contains(t, result, "type NewState struct {\n\t*transfig.State\n}\n")
+	assert.Contains(t, result, "type NewState struct")
+	assert.Contains(t, result, "*transfig.State")
+	assert.Contains(t, result, "transfig.Path")
 }
 
 func Test_StateStruct_TwoPath(t *testing.T) {
@@ -35,7 +37,9 @@ func Test_StateStruct_TwoPath(t *testing.T) {
 	f.Add(StateStruct(path))
 	result := renderToString(t, f)
 	assert.Contains(t, result, "import transfig \"github.com/vitorqb/transfig\"")
-	assert.Contains(t, result, "type FooBarNewState struct {\n\t*transfig.State\n}\n")
+	assert.Contains(t, result, "type FooBarNewState struct")
+	assert.Contains(t, result, "*transfig.State")
+	assert.Contains(t, result, "transfig.Path")
 }
 
 func Test_ConstructorFunc(t *testing.T) {
@@ -43,7 +47,9 @@ func Test_ConstructorFunc(t *testing.T) {
 	path := Path{}
 	f.Add(ConstructorFunc(path))
 	result := renderToString(t, f)
-	assert.Contains(t, result, "func New(s *transfig.State) *NewState {\n\treturn &NewState{s}\n}\n")
+	assert.Contains(t, result, "func New(s *transfig.State) *NewState {")
+	assert.Contains(t, result, "p := transfig.Path{}")
+	assert.Contains(t, result, "return &NewState{s, p}")
 }
 
 func Test_SubStateGetter_PathLenOne(t *testing.T) {
@@ -51,7 +57,9 @@ func Test_SubStateGetter_PathLenOne(t *testing.T) {
 	path := Path{"Foo"}
 	f.Add(SubStateGetter(path))
 	result := renderToString(t, f)
-	assert.Contains(t, result, "func (s *NewState) Foo() *FooNewState {\n\treturn &FooNewState{s.State}\n}")
+	assert.Contains(t, result, "func (s *NewState) Foo() *FooNewState")
+	assert.Contains(t, result, "p := transfig.Path{\"Foo\"}")
+	assert.Contains(t, result, "return &FooNewState{s.State, p}")
 }
 
 func Test_TypeFor_Base(t *testing.T) {
@@ -85,5 +93,6 @@ func Test_ConstructorFromArgsFunc(t *testing.T) {
 	f.Add(ConstructorFromArgsFunc(path))
 	result := renderToString(t, f)
 	assert.Contains(t, result, "func FromArgs(args transfig.CallbackArgs) *NewState {")
-	assert.Contains(t, result, "return &NewState{transfig.NewStateFromMap(args)}")
+	assert.Contains(t, result, "p := transfig.Path{}")
+	assert.Contains(t, result, "return &NewState{transfig.NewStateFromMap(args), p}")
 }

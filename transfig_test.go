@@ -23,6 +23,19 @@ func DefaultState() *State {
 	return x
 }
 
+func Test_Path_Contains(t *testing.T) {
+	assert.True(t, Path{Name}.Contains(Path{Name}))
+	assert.True(t, Path{Name}.Contains(Path{Name, Age}))
+	assert.True(t, Path{Name}.Contains(Path{Name, Age, Ammount}))
+	assert.True(t, Path{Age, Name}.Contains(Path{Age}))
+	assert.True(t, Path{Age, Name}.Contains(Path{Age, Name}))
+	assert.True(t, Path{}.Contains(Path{Name, Age, Ammount}))
+	assert.True(t, Path{MissingKey}.Contains(Path{}))
+	assert.True(t, Path{}.Contains(Path{}))
+	assert.False(t, Path{MissingKey}.Contains(Path{Age}))
+	assert.False(t, Path{Age, Job}.Contains(Path{Age, Title}))
+}
+
 func Test_Subscribe_OneVariable(t *testing.T) {
 	state := DefaultState()
 	callbackArgs := make(map[KeyString]interface{})

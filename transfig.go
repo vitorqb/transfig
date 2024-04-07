@@ -10,7 +10,7 @@ import (
 type KeyValIter func() (key KeyString, value interface{}, finished bool)
 
 // Path is a sequence of KeyString to access a nested value in a state
-type Path = []KeyString
+type Path []KeyString
 
 // CallbackArgs is a map of KeyString to interface{} that is
 // passed to a subscription's callback
@@ -34,36 +34,35 @@ type Selector interface {
 	Contains(Path) bool
 }
 
-// NestedSelector is a Selector for a nested value in the state
-type NestedSelector struct {
-	keys Path
-}
-
-func (s NestedSelector) Select(m map[KeyString]interface{}) KeyValIter {
+// Path implements Selector
+func (p Path) Select(m map[KeyString]interface{}) KeyValIter {
 	called := false
 	return func() (key KeyString, value interface{}, finished bool) {
-		if called || len(s.keys) == 0 {
+		if called || len(p) == 0 {
 			return key, nil, true
 		}
 		called = true
-		if len(s.keys) == 1 {
-			return s.keys[0], m[s.keys[0]], false
+		if len(p) == 1 {
+			return p[0], m[p[0]], false
 		}
-		topKey, restKeys := s.keys[0], s.keys[1:]
+		topKey, restKeys := p[0], p[1:]
 		topValue := m[topKey]
 		topValueAsMap, ok := topValue.(map[KeyString]interface{})
 		if !ok {
 			topValueAsMap = make(map[KeyString]interface{})
 		}
-		restIt := NestedSelector{restKeys}.Select(topValueAsMap)
+		restIt := restKeys.Select(topValueAsMap)
 		nestedKey, nestedValue, _ := restIt()
-		return s.keys[0], map[KeyString]interface{}{nestedKey: nestedValue}, false
+		return p[0], map[KeyString]interface{}{nestedKey: nestedValue}, false
 	}
 }
 
-func (s NestedSelector) Contains(p Path) bool {
-	for i, k := range p {
-		if s.keys[i] != k {
+func (p Path) Contains(p2 Path) bool {
+	for i, k := range p2 {
+		if i >= len(p) {
+			return true
+		}
+		if p[i] != k {
 			return false
 		}
 	}
@@ -132,7 +131,7 @@ func (s *Subscription) With(selector Selector) *Subscription {
 
 // WithNested allows subscribing to nested values in the state
 func (s *Subscription) WithNested(keys ...KeyString) *Subscription {
-	s.selectors = append(s.selectors, NestedSelector{keys})
+	s.selectors = append(s.selectors, Path(keys))
 	return s
 }
 

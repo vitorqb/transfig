@@ -78,3 +78,12 @@ func Test_TypeFor_SliceOfCustomStruct(t *testing.T) {
 	assert.Contains(t, result, "import stategentest \"github.com/vitorqb/transfig/pkg/stategen_test\"")
 	assert.Contains(t, result, "var v []stategentest.TestStruct")
 }
+
+func Test_ConstructorFromArgsFunc(t *testing.T) {
+	f := jen.NewFile("foo")
+	path := Path{}
+	f.Add(ConstructorFromArgsFunc(path))
+	result := renderToString(t, f)
+	assert.Contains(t, result, "func FromArgs(args transfig.CallbackArgs) *NewState {")
+	assert.Contains(t, result, "return &NewState{transfig.NewStateFromMap(args)}")
+}

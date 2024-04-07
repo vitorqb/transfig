@@ -1,6 +1,7 @@
 package stategen
 
 import (
+	"fmt"
 	"reflect"
 
 	jen "github.com/dave/jennifer/jen"
@@ -16,24 +17,30 @@ type GenNode map[string]interface{}
 // struct with getters and setters for each nested object in the state tree.
 func StateGen(rootNode GenNode, packagePath string, filepath string) error {
 	f := jen.NewFilePath(packagePath)
-	gen(Path{}, rootNode, f)
+	if err := gen(Path{}, rootNode, f); err != nil {
+		return err
+	}
 	return f.Save(filepath)
 }
 
 // gen is a recursive code generator function used by StateGen. `path` is the
 // current path in the state tree, `rootNode` is the current node in the state
 // tree, and `f` is the file being generated.
-func gen(path Path, rootNode GenNode, f *jen.File) {
+func gen(path Path, rootNode GenNode, f *jen.File) error {
 	f.Add(stateStruct(path))
 	if len(path) == 0 {
 		f.Add(constructorFunc(path))
+		f.Add(constructorFromArgsFunc(path))
 	}
 	for key, node := range rootNode {
 		if nodeAsNode, ok := node.(GenNode); ok {
 			newPath := append(path, KeyString(key))
 			f.Add(subStateGetter(newPath))
-			gen(newPath, nodeAsNode, f)
-			return
+			err := gen(newPath, nodeAsNode, f)
+			if err != nil {
+				return err
+			}
+			continue
 		}
 		jenPath := []jen.Code{}
 		for _, k := range path {
@@ -56,8 +63,11 @@ func gen(path Path, rootNode GenNode, f *jen.File) {
 			f.Func().Params(jen.Id("s").Op("*").Id(stateStructName(path))).Id("Set" + key).Params(jen.Id("v").Add(varType)).Block(
 				jen.Id("s").Dot("SetNested").Call(jen.Qual(TransfigImportPath, "Path").Values(jenPath...), jen.Id("v")),
 			)
+			continue
 		}
+		return fmt.Errorf("unkown value for node: %s", node)
 	}
+	return nil
 }
 
 func stateStructName(path Path) string {
@@ -77,6 +87,12 @@ func stateStruct(path Path) *jen.Statement {
 func constructorFunc(path Path) *jen.Statement {
 	return jen.Func().Id("New").Params(jen.Id("s").Op("*").Qual(TransfigImportPath, "State")).Op("*").Id(stateStructName(path)).Block(
 		jen.Return(jen.Op("&").Id(stateStructName(path))).Values(jen.Id("s")),
+	)
+}
+
+func constructorFromArgsFunc(path Path) *jen.Statement {
+	return jen.Func().Id("FromArgs").Params(jen.Id("args").Qual(TransfigImportPath, "CallbackArgs")).Op("*").Id("NewState").Block(
+		jen.Return(jen.Op("&").Id("NewState").Values(jen.Qual(TransfigImportPath, "NewStateFromMap").Call(jen.Id("args")))),
 	)
 }
 

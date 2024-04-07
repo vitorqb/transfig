@@ -261,3 +261,11 @@ func NewState() *State {
 		values:        make(map[KeyString]interface{}),
 	}
 }
+
+// NewStateFromMap creates a new state from a map
+func NewStateFromMap(m map[KeyString]interface{}) *State {
+	return &State{
+		subscriptions: make(map[string]*Subscription),
+		values:        mapDeepCopy(m),
+	}
+}

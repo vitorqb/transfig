@@ -4,3 +4,4 @@ var StateStruct = stateStruct
 var ConstructorFunc = constructorFunc
 var SubStateGetter = subStateGetter
 var TypeFor = typeFor
+var ConstructorFromArgsFunc = constructorFromArgsFunc
